@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Eight Lights — memory game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  --bg: #E4E8F7;
+  --board: #2B3566;
+  --ink: #1F2650;
+  --muted: #5A6292;
+  --tile-off: 0.32;
+  --btn: #2B3566;
+  --btn-ink: #FFFFFF;
+  --bad: #D63A5A;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161B36;
+    --board: #232B57;
+    --ink: #E8EBFA;
+    --muted: #9AA2CF;
+    --tile-off: 0.26;
+    --btn: #E8EBFA;
+    --btn-ink: #1F2650;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161B36;
+  --board: #232B57;
+  --ink: #E8EBFA;
+  --muted: #9AA2CF;
+  --tile-off: 0.26;
+  --btn: #E8EBFA;
+  --btn-ink: #1F2650;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+html { scroll-padding-top: env(safe-area-inset-top, 0px); background: var(--bg); }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Fredoka", "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+}
+main {
+  width: 100%;
+  max-width: 34rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+h1 { margin: 0; font-size: 2rem; font-weight: 700; letter-spacing: -0.01em; }
+.scores { display: flex; gap: 1.25rem; font-size: 1rem; color: var(--muted); }
+.scores b { color: var(--ink); font-size: 1.4rem; font-weight: 600; margin-left: 0.25rem; }
+
+.board {
+  background: var(--board);
+  border-radius: 1.75rem;
+  padding: 0.9rem;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 0.75rem;
+  aspect-ratio: 2 / 1;
+  transition: transform 0.15s;
+}
+.board.shake { animation: shake 0.45s; }
+@keyframes shake {
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(5px); }
+}
+.tile {
+  border: none;
+  border-radius: 1rem;
+  background: var(--c);
+  filter: saturate(0.45) brightness(0.6);
+  color: #FFFFFF;
+  font-family: inherit;
+  font-size: clamp(1.5rem, 6vw, 3.5rem);
+  font-weight: 600;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: filter 0.12s, transform 0.12s, box-shadow 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.tile:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.tile.lit {
+  filter: none;
+  transform: scale(1.04);
+  box-shadow: 0 0 1.5rem 0.2rem var(--c);
+}
+.board.locked .tile { cursor: default; }
+.board.wrong .tile { background: var(--bad); }
+
+.status { text-align: center; font-size: 1.15rem; min-height: 1.6em; margin: 0; color: var(--muted); }
+.controls { display: flex; justify-content: center; gap: 0.75rem; flex-wrap: wrap; }
+button.action {
+  font: inherit;
+  font-size: 1.1rem;
+  font-weight: 600;
+  padding: 0.7rem 1.6rem;
+  border-radius: 999px;
+  border: 2px solid var(--btn);
+  background: var(--btn);
+  color: var(--btn-ink);
+  cursor: pointer;
+}
+button.action.ghost { background: transparent; color: var(--ink); }
+button.action:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+button.action:disabled { opacity: 0.4; cursor: default; }
+
+:fullscreen main { max-width: min(70rem, calc((100vh - 15rem) * 2)); }
+:-webkit-full-screen main { max-width: min(70rem, calc((100vh - 15rem) * 2)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tile, .board { transition: none; }
+  .board.shake { animation: none; }
+  .tile.lit { transform: none; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Eight Lights</h1>
+    <div class="scores">
+      <span>Level<b id="level">0</b></span>
+      <span>Best<b id="best">0</b></span>
+    </div>
+  </header>
+
+  <div class="board locked" id="board" role="group" aria-label="Game board"></div>
+
+  <p class="status" id="status" aria-live="polite">Watch the lights, then tap them in the same order.</p>
+
+  <div class="controls">
+    <button class="action" id="start">Start game</button>
+    <button class="action ghost" id="sound" aria-pressed="true">Sound on</button>
+    <button class="action ghost" id="fullscreen">Full screen</button>
+  </div>
+</main>
+
+<script>
+(() => {
+  const colors = ["#FF6B6B","#FFA94D","#FFD43B","#69DB7C","#38D9A9","#4DABF7","#748FFC","#F783AC"];
+  const notes  = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25];
+
+  const board = document.getElementById("board");
+  const levelEl = document.getElementById("level");
+  const bestEl = document.getElementById("best");
+  const statusEl = document.getElementById("status");
+  const startBtn = document.getElementById("start");
+  const soundBtn = document.getElementById("sound");
+  const fsBtn = document.getElementById("fullscreen");
+
+  let sequence = [];
+  let step = 0;
+  let accepting = false;
+  let soundOn = true;
+  let best = 0;
+  let audio = null;
+  let runId = 0;
+
+  try { best = parseInt(localStorage.getItem("nine-lights-best") || "0", 10) || 0; } catch (e) { best = 0; }
+  bestEl.textContent = best;
+
+  const tiles = colors.map((c, i) => {
+    const b = document.createElement("button");
+    b.className = "tile";
+    b.style.setProperty("--c", c);
+    b.textContent = i + 1;
+    b.setAttribute("aria-label", "Square " + (i + 1));
+    b.addEventListener("pointerdown", (e) => { e.preventDefault(); press(i); });
+    b.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); press(i); }
+    });
+    board.appendChild(b);
+    return b;
+  });
+
+  // Number keys 1–8 match the numbered squares
+  document.addEventListener("keydown", (e) => {
+    const n = parseInt(e.key, 10);
+    if (n >= 1 && n <= 8) press(n - 1);
+  });
+
+  function tone(freq, ms) {
+    if (!soundOn) return;
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audio.createOscillator();
+      const g = audio.createGain();
+      o.type = "triangle";
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, audio.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.25, audio.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + ms / 1000);
+      o.connect(g).connect(audio.destination);
+      o.start();
+      o.stop(audio.currentTime + ms / 1000 + 0.05);
+    } catch (e) {}
+  }
+
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+  async function flash(i, ms) {
+    tiles[i].classList.add("lit");
+    tone(notes[i], ms);
+    await wait(ms);
+    tiles[i].classList.remove("lit");
+  }
+
+  function speed() {
+    // Gets faster as the sequence grows
+    const len = sequence.length;
+    return { on: Math.max(220, 520 - len * 25), gap: Math.max(90, 220 - len * 10) };
+  }
+
+  async function playSequence() {
+    const id = runId;
+    accepting = false;
+    board.classList.add("locked");
+    statusEl.textContent = "Watch…";
+    await wait(600);
+    const { on, gap } = speed();
+    for (const i of sequence) {
+      if (id !== runId) return;
+      await flash(i, on);
+      await wait(gap);
+    }
+    if (id !== runId) return;
+    step = 0;
+    accepting = true;
+    board.classList.remove("locked");
+    statusEl.textContent = "Your turn — " + sequence.length + (sequence.length === 1 ? " light" : " lights");
+  }
+
+  function nextRound() {
+    sequence.push(Math.floor(Math.random() * 8));
+    levelEl.textContent = sequence.length;
+    playSequence();
+  }
+
+  async function press(i) {
+    if (!accepting) return;
+    flash(i, 200);
+    if (i !== sequence[step]) return lose();
+    step++;
+    if (step === sequence.length) {
+      accepting = false;
+      board.classList.add("locked");
+      if (sequence.length > best) {
+        best = sequence.length;
+        bestEl.textContent = best;
+        try { localStorage.setItem("nine-lights-best", String(best)); } catch (e) {}
+      }
+      statusEl.textContent = "Nice! Next round…";
+      await wait(700);
+      nextRound();
+    }
+  }
+
+  async function lose() {
+    accepting = false;
+    board.classList.add("locked", "wrong", "shake");
+    tone(110, 500);
+    const reached = sequence.length - 1;
+    statusEl.textContent = "Wrong light. You remembered " + reached + (reached === 1 ? " step." : " steps.");
+    startBtn.textContent = "Play again";
+    startBtn.disabled = false;
+    await wait(500);
+    board.classList.remove("wrong", "shake");
+  }
+
+  startBtn.addEventListener("click", () => {
+    runId++;
+    sequence = [];
+    startBtn.disabled = true;
+    startBtn.textContent = "Playing…";
+    nextRound();
+  });
+
+  const root = document.documentElement;
+  const fsSupported = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+  const isFull = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  if (!fsSupported) fsBtn.hidden = true;
+  fsBtn.addEventListener("click", () => {
+    try {
+      if (isFull()) {
+        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      } else {
+        (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+      }
+    } catch (e) {}
+  });
+  const syncFs = () => { fsBtn.textContent = isFull() ? "Exit full screen" : "Full screen"; };
+  document.addEventListener("fullscreenchange", syncFs);
+  document.addEventListener("webkitfullscreenchange", syncFs);
+
+  soundBtn.addEventListener("click", () => {
+    soundOn = !soundOn;
+    soundBtn.textContent = soundOn ? "Sound on" : "Sound off";
+    soundBtn.setAttribute("aria-pressed", String(soundOn));
+  });
+})();
+</script>
+</body>
+</html>
